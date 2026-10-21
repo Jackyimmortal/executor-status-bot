@@ -148,7 +148,7 @@ class ExecutorBot {
           res.end();
         }
       });
-      this.httpServer.listen(port, () => {
+      this.httpServer.listen(port, '0.0.0.0', () => {
         logger.info(`Health check HTTP server listening on port ${port} (Ready for 24/7 Cloud hosting)`);
       });
     } catch (httpErr) {
