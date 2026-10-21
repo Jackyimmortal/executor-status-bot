@@ -150,6 +150,21 @@ class ExecutorBot {
       });
       this.httpServer.listen(port, '0.0.0.0', () => {
         logger.info(`Health check HTTP server listening on port ${port} (Ready for 24/7 Cloud hosting)`);
+
+        // Render & Cloud Free Tier Anti-Sleep Keep-Alive
+        const externalUrl = process.env.RENDER_EXTERNAL_URL || process.env.KEEP_ALIVE_URL;
+        if (externalUrl) {
+          const pingUrl = externalUrl.replace(/\/$/, '') + '/health';
+          logger.info(`Anti-sleep keep-alive enabled: pinging ${pingUrl} every 10 minutes.`);
+          setInterval(async () => {
+            try {
+              const res = await fetch(pingUrl);
+              logger.debug(`Keep-alive ping response: ${res.status}`);
+            } catch (pingErr) {
+              logger.warn(`Keep-alive ping failed: ${pingErr.message}`);
+            }
+          }, 10 * 60 * 1000);
+        }
       });
     } catch (httpErr) {
       logger.warn(`Could not start HTTP server on port ${port}:`, httpErr.message);
