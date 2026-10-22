@@ -136,12 +136,25 @@ class ExecutorBot {
     try {
       this.httpServer = http.createServer((req, res) => {
         if (req.url === '/health' || req.url === '/') {
+          let roleBotReady = false;
+          let ticketBotReady = false;
+          try {
+            const { getRoleClient } = require('./modules/role-bot');
+            roleBotReady = Boolean(getRoleClient()?.isReady());
+          } catch {}
+          try {
+            const { getTicketClient } = require('./modules/ticket-bot');
+            ticketBotReady = Boolean(getTicketClient()?.isReady());
+          } catch {}
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             status: 'ok',
             service: 'executor-status-bot',
             uptime: Math.floor(process.uptime()),
-            discordReady: Boolean(this.client?.isReady())
+            discordReady: Boolean(this.client?.isReady()),
+            roleBotReady,
+            ticketBotReady
           }));
         } else {
           res.writeHead(404);
