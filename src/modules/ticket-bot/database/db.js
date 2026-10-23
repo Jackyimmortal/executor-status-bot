@@ -75,6 +75,23 @@ class TicketDatabase {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS member_invites (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        regular INTEGER DEFAULT 0,
+        bonus INTEGER DEFAULT 0,
+        left_count INTEGER DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS invited_members (
+        guild_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        inviter_id TEXT NOT NULL,
+        joined_at TEXT NOT NULL,
+        PRIMARY KEY (guild_id, member_id)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_ticket_panels_custom_id ON ticket_panels(custom_id);
       CREATE INDEX IF NOT EXISTS idx_tickets_channel_id ON tickets(channel_id);
       CREATE INDEX IF NOT EXISTS idx_tickets_user_status ON tickets(guild_id, user_id, status);
@@ -222,6 +239,85 @@ class TicketDatabase {
       SELECT * FROM credits
       WHERE guild_id = ?
       ORDER BY id DESC
+      LIMIT ?
+    `).all(guildId, limit);
+  }
+
+  // --- Invite Tracking & Pumping Methods ---
+
+  getInvites(guildId, userId) {
+    const row = this.db.prepare(`
+      SELECT regular, bonus, left_count
+      FROM member_invites
+      WHERE guild_id = ? AND user_id = ?
+    `).get(guildId, userId);
+
+    const regular = row ? row.regular : 0;
+    const bonus = row ? row.bonus : 0;
+    const leftCount = row ? row.left_count : 0;
+    const total = Math.max(0, regular + bonus - leftCount);
+
+    return { regular, bonus, leftCount, total };
+  }
+
+  addBonusInvites(guildId, userId, amount) {
+    this.db.prepare(`
+      INSERT INTO member_invites (guild_id, user_id, regular, bonus, left_count)
+      VALUES (?, ?, 0, ?, 0)
+      ON CONFLICT(guild_id, user_id) DO UPDATE SET bonus = bonus + ?
+    `).run(guildId, userId, amount, amount);
+
+    return this.getInvites(guildId, userId);
+  }
+
+  recordInviteJoin(guildId, inviterId, memberId) {
+    const now = new Date().toISOString();
+
+    // 1. Record member-inviter relationship
+    this.db.prepare(`
+      INSERT OR REPLACE INTO invited_members (guild_id, member_id, inviter_id, joined_at)
+      VALUES (?, ?, ?, ?)
+    `).run(guildId, memberId, inviterId, now);
+
+    // 2. Increment regular count for inviter
+    this.db.prepare(`
+      INSERT INTO member_invites (guild_id, user_id, regular, bonus, left_count)
+      VALUES (?, ?, 1, 0, 0)
+      ON CONFLICT(guild_id, user_id) DO UPDATE SET regular = regular + 1
+    `).run(guildId, inviterId);
+
+    return this.getInvites(guildId, inviterId);
+  }
+
+  recordInviteLeave(guildId, memberId) {
+    const record = this.db.prepare(`
+      SELECT inviter_id FROM invited_members
+      WHERE guild_id = ? AND member_id = ?
+    `).get(guildId, memberId);
+
+    if (record) {
+      this.db.prepare(`
+        UPDATE member_invites
+        SET left_count = left_count + 1
+        WHERE guild_id = ? AND user_id = ?
+      `).run(guildId, record.inviter_id);
+
+      return record.inviter_id;
+    }
+    return null;
+  }
+
+  getInviteLeaderboard(guildId, limit = 10) {
+    return this.db.prepare(`
+      SELECT 
+        user_id,
+        regular,
+        bonus,
+        left_count,
+        MAX(0, (regular + bonus - left_count)) as total
+      FROM member_invites
+      WHERE guild_id = ?
+      ORDER BY total DESC
       LIMIT ?
     `).all(guildId, limit);
   }

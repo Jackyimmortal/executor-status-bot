@@ -13,6 +13,12 @@ const creditPump = require('./credit-pump');
 const creditStats = require('./credit-stats');
 const creditPanel = require('./credit-panel');
 
+// Invite & Member Stats Commands
+const inviteCheck = require('./invite-check');
+const inviteAdd = require('./invite-add');
+const inviteTop = require('./invite-top');
+const statsSetup = require('./stats-setup');
+
 const commandsList = [
   ticketPanel,
   ticketClose,
@@ -22,7 +28,11 @@ const commandsList = [
   creditCreate,
   creditPump,
   creditStats,
-  creditPanel
+  creditPanel,
+  inviteCheck,
+  inviteAdd,
+  inviteTop,
+  statsSetup
 ];
 
 const commandsCollection = new Collection();
