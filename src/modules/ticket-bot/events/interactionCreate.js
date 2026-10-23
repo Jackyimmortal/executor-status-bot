@@ -200,34 +200,41 @@ module.exports = {
 };
 
 async function handleOpenTicket(interaction, { db, client }) {
-  const panel = db.getPanelByCustomId(interaction.customId);
+  await interaction.deferReply({ ephemeral: true });
+
+  let panel = db.getPanelByCustomId(interaction.customId);
   if (!panel) {
-    return interaction.reply({
-      content: '❌ ไม่พบข้อมูลแผงทิกเก็ตนี้ในระบบ',
-      ephemeral: true
+    panel = db.getLatestPanel(interaction.guildId);
+  }
+  if (!panel) {
+    return interaction.editReply({
+      content: '❌ ยังไม่มีการตั้งค่าแผงทิกเก็ตในเซิร์ฟเวอร์ กรุณาใช้คำสั่ง `/ticket-panel` เพื่อสร้างแผงก่อนครับ'
     });
   }
 
-  // Prevent multiple open tickets per user
+  // Prevent multiple open tickets per user (check if old channel still exists)
   const existing = db.getUserOpenTicket(interaction.guildId, interaction.user.id);
   if (existing) {
-    return interaction.reply({
-      content: `⚠️ **คุณมีห้องทิกเก็ตที่เปิดอยู่แล้วครับ**: <#${existing.channel_id}>`,
-      ephemeral: true
-    });
+    const existingChannel = await interaction.guild.channels.fetch(existing.channel_id).catch(() => null);
+    if (existingChannel) {
+      return interaction.editReply({
+        content: `⚠️ **คุณมีห้องทิกเก็ตที่เปิดอยู่แล้วครับ**: <#${existing.channel_id}>`
+      });
+    } else {
+      // Old channel was deleted, mark as closed so user can open a new one!
+      db.closeTicket(existing.channel_id, 'System (Channel Deleted)');
+    }
   }
-
-  await interaction.deferReply({ ephemeral: true });
 
   const guild = interaction.guild;
   const botMember = guild.members.me;
 
   // Bot permission check
-  if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
-      !botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+  if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) &&
+      !botMember.permissions.has(PermissionsBitField.Flags.Administrator)) {
     return interaction.editReply({
       content: '❌ **บอทขาดสิทธิ์จำเป็นในการสร้างห้องทิกเก็ต**:\n' +
-        'บอทต้องมีสิทธิ์ **จัดการแชนแนล (Manage Channels)** และ **จัดการบทบาท (Manage Roles)** เพื่อสร้างห้องและตั้งค่าห้องส่วนตัวครับ\n\n' +
+        'บอทต้องมีสิทธิ์ **จัดการแชนแนล (Manage Channels)** หรือ **ผู้ดูแลระบบ (Administrator)** เพื่อสร้างห้องและตั้งค่าห้องส่วนตัวครับ\n\n' +
         '👉 **วิธีแก้ที่ง่ายที่สุด:** ไปที่ **การตั้งค่าเซิร์ฟเวอร์ ➔ บทบาท (Roles)** แล้วเปิดสิทธิ์ **ผู้ดูแลระบบ (Administrator)** ให้กับบอท `XSTORE-TICKET` ครับ'
     });
   }
@@ -275,13 +282,29 @@ async function handleOpenTicket(interaction, { db, client }) {
       });
     }
 
-    const channel = await guild.channels.create({
-      name: channelName,
-      type: ChannelType.GuildText,
-      parent: panel.category_id || null,
-      permissionOverwrites: permissionOverwrites,
-      reason: `Ticket opened by ${interaction.user.tag}`
-    });
+    let channel;
+    try {
+      channel = await guild.channels.create({
+        name: channelName,
+        type: ChannelType.GuildText,
+        parent: panel.category_id || null,
+        permissionOverwrites: permissionOverwrites,
+        reason: `Ticket opened by ${interaction.user.tag}`
+      });
+    } catch (catErr) {
+      // If failed due to category permissions/limit, retry without category
+      if (panel.category_id) {
+        logger.warn('Failed to create channel in category, retrying without category:', catErr.message);
+        channel = await guild.channels.create({
+          name: channelName,
+          type: ChannelType.GuildText,
+          permissionOverwrites: permissionOverwrites,
+          reason: `Ticket opened by ${interaction.user.tag}`
+        });
+      } else {
+        throw catErr;
+      }
+    }
 
     const ticketRecord = db.createTicket(
       guild.id,

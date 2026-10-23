@@ -141,6 +141,15 @@ class TicketDatabase {
     `).get(messageId);
   }
 
+  getLatestPanel(guildId) {
+    return this.db.prepare(`
+      SELECT * FROM ticket_panels
+      WHERE guild_id = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(guildId);
+  }
+
   getNextTicketNumber(guildId) {
     const row = this.db.prepare(`
       SELECT MAX(ticket_number) AS max_num
