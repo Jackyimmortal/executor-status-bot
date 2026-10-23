@@ -60,9 +60,25 @@ class TicketDatabase {
         closed_by TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS credits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT,
+        customer_name TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        price TEXT,
+        rating INTEGER DEFAULT 5,
+        comment TEXT NOT NULL,
+        image_url TEXT,
+        is_automated INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_ticket_panels_custom_id ON ticket_panels(custom_id);
       CREATE INDEX IF NOT EXISTS idx_tickets_channel_id ON tickets(channel_id);
       CREATE INDEX IF NOT EXISTS idx_tickets_user_status ON tickets(guild_id, user_id, status);
+      CREATE INDEX IF NOT EXISTS idx_credits_guild_id ON credits(guild_id);
     `);
   }
 
@@ -159,6 +175,55 @@ class TicketDatabase {
       SET status = 'OPEN', closed_at = NULL, closed_by = NULL
       WHERE channel_id = ?
     `).run(channelId);
+  }
+
+  saveCredit(data) {
+    const now = new Date().toISOString();
+    const result = this.db.prepare(`
+      INSERT INTO credits (
+        guild_id, channel_id, message_id, customer_name, product_name,
+        price, rating, comment, image_url, is_automated, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      data.guildId,
+      data.channelId,
+      data.messageId || null,
+      data.customerName,
+      data.productName,
+      data.price || null,
+      data.rating || 5,
+      data.comment,
+      data.imageUrl || null,
+      data.isAutomated ? 1 : 0,
+      now
+    );
+
+    return Number(result.lastInsertRowid);
+  }
+
+  getCreditStats(guildId) {
+    const row = this.db.prepare(`
+      SELECT 
+        COUNT(*) as total_credits,
+        ROUND(AVG(rating), 1) as avg_rating
+      FROM credits
+      WHERE guild_id = ?
+    `).get(guildId);
+
+    return {
+      total: row ? row.total_credits : 0,
+      avgRating: (row && row.avg_rating) ? row.avg_rating : 5.0
+    };
+  }
+
+  getRecentCredits(guildId, limit = 5) {
+    return this.db.prepare(`
+      SELECT * FROM credits
+      WHERE guild_id = ?
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(guildId, limit);
   }
 }
 

@@ -101,6 +101,100 @@ module.exports = {
         await handleTranscript(interaction);
         return;
       }
+
+      // H. Open Credit Modal
+      if (customId === 'btn_open_credit_modal') {
+        const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: ModalRow } = require('discord.js');
+        const modal = new ModalBuilder()
+          .setCustomId('modal_submit_credit')
+          .setTitle('เขียนรีวิว / ให้เครดิตร้านค้า');
+
+        const productInput = new TextInputBuilder()
+          .setCustomId('credit_product')
+          .setLabel('สินค้าที่ซื้อ (เช่น Delta VIP 30 วัน)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const priceInput = new TextInputBuilder()
+          .setCustomId('credit_price')
+          .setLabel('ราคา (เช่น 50 บาท, 100฿)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false);
+
+        const commentInput = new TextInputBuilder()
+          .setCustomId('credit_comment')
+          .setLabel('ข้อความรีวิว / ความประทับใจ')
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder('เช่น ได้รับของจริง ไวมากครับ แอดมินบริการดี +1 เครดิต')
+          .setRequired(true);
+
+        modal.addComponents(
+          new ModalRow().addComponents(productInput),
+          new ModalRow().addComponents(priceInput),
+          new ModalRow().addComponents(commentInput)
+        );
+
+        await interaction.showModal(modal);
+        return;
+      }
+    }
+
+    // 3. Modal Submission Handling
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'modal_submit_credit') {
+        const product = interaction.fields.getTextInputValue('credit_product');
+        const price = interaction.fields.getTextInputValue('credit_price') || 'ไม่ระบุ';
+        const comment = interaction.fields.getTextInputValue('credit_comment');
+
+        let reviewChannel = interaction.guild.channels.cache.find(
+          c => c.name.toLowerCase().includes('review') || c.name.toLowerCase().includes('credit')
+        ) || interaction.channel;
+
+        const txId = `TX-${Math.floor(10000 + Math.random() * 90000)}`;
+
+        const embed = new EmbedBuilder()
+          .setColor(0x57F287)
+          .setTitle(`🛒 บันทึกเครดิตการซื้อขาย • ${txId}`)
+          .setDescription(`ขอบคุณลูกค้าที่ไว้วางใจเลือกซื้อสินค้ากับร้าน **${interaction.guild.name}** ครับ! ❤️`)
+          .addFields(
+            { name: '👤 ลูกค้า', value: `<@${interaction.user.id}>`, inline: true },
+            { name: '📦 สินค้าที่ซื้อ', value: `\`${product}\``, inline: true },
+            { name: '💵 ยอดเงิน', value: `\`${price}\``, inline: true },
+            { name: '⭐ ความพึงพอใจ', value: '⭐⭐⭐⭐⭐ (5/5)', inline: true },
+            { name: '💬 ความคิดเห็น / รีวิว', value: `> *"${comment}"*`, inline: false },
+            { name: '🛡️ สถานะการทำรายการ', value: '`✅ สำเร็จ • ได้รับสินค้าเรียบร้อย 100%`', inline: false }
+          )
+          .setFooter({ text: `${interaction.guild.name} • ร้านค้าปลอดภัย มั่นใจได้ 100%` })
+          .setTimestamp();
+
+        try {
+          const msg = await reviewChannel.send({ embeds: [embed] });
+
+          db.saveCredit({
+            guildId: interaction.guildId,
+            channelId: reviewChannel.id,
+            messageId: msg.id,
+            customerName: interaction.user.tag,
+            productName: product,
+            price: price,
+            rating: 5,
+            comment: comment,
+            imageUrl: null,
+            isAutomated: false
+          });
+
+          await interaction.reply({
+            content: `🎉 **ขอบคุณสำหรับรีวิวครับ!** บอทได้ส่งการ์ดเครดิตของคุณไปยังห้อง ${reviewChannel} เรียบร้อยแล้วครับ ❤️`,
+            ephemeral: true
+          });
+        } catch (err) {
+          await interaction.reply({
+            content: `❌ ไม่สามารถส่งรีวิวไปยังห้อง ${reviewChannel} ได้: \`${err.message}\``,
+            ephemeral: true
+          });
+        }
+        return;
+      }
     }
   }
 };
