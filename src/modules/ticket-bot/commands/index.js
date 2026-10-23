@@ -6,6 +6,7 @@ const ticketClose = require('./ticket-close');
 const ticketAdd = require('./ticket-add');
 const ticketRemove = require('./ticket-remove');
 const ticketHelp = require('./ticket-help');
+const ticketSetNumber = require('./ticket-set-number');
 
 // Credit / Review Commands
 const creditCreate = require('./credit-create');
@@ -25,6 +26,7 @@ const commandsList = [
   ticketAdd,
   ticketRemove,
   ticketHelp,
+  ticketSetNumber,
   creditCreate,
   creditPump,
   creditStats,

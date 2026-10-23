@@ -143,11 +143,24 @@ class TicketDatabase {
 
   getNextTicketNumber(guildId) {
     const row = this.db.prepare(`
-      SELECT COALESCE(MAX(ticket_number), 0) + 1 AS next_num
+      SELECT MAX(ticket_number) AS max_num
       FROM tickets
       WHERE guild_id = ?
     `).get(guildId);
-    return row ? row.next_num : 1;
+
+    // Default start from 3590 as requested
+    if (!row || !row.max_num || row.max_num < 3589) {
+      return 3590;
+    }
+    return row.max_num + 1;
+  }
+
+  setNextTicketNumber(guildId, targetNumber) {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT OR REPLACE INTO tickets (ticket_number, guild_id, channel_id, user_id, support_role_id, status, created_at)
+      VALUES (?, ?, 'seed_ticket_base', 'system', 'system', 'CLOSED', ?)
+    `).run(targetNumber - 1, guildId, now);
   }
 
   createTicket(guildId, channelId, userId, panelId, supportRoleId) {
@@ -217,6 +230,44 @@ class TicketDatabase {
     );
 
     return Number(result.lastInsertRowid);
+  }
+
+  bulkSaveCredits(guildId, channelId, count, specifiedProduct = null) {
+    const {
+      SAMPLE_PRODUCTS,
+      SAMPLE_COMMENTS,
+      SAMPLE_PRICES,
+      SAMPLE_BUYERS,
+      getRandomItem
+    } = require('../utils/credit-presets');
+
+    const stmt = this.db.prepare(`
+      INSERT INTO credits (
+        guild_id, channel_id, message_id, customer_name, product_name,
+        price, rating, comment, image_url, is_automated, created_at
+      )
+      VALUES (?, ?, NULL, ?, ?, ?, 5, ?, NULL, 1, ?)
+    `);
+
+    this.db.exec('BEGIN TRANSACTION;');
+    try {
+      const now = Date.now();
+      for (let i = 0; i < count; i++) {
+        const product = specifiedProduct || getRandomItem(SAMPLE_PRODUCTS);
+        const comment = getRandomItem(SAMPLE_COMMENTS);
+        const buyer = getRandomItem(SAMPLE_BUYERS);
+        const price = getRandomItem(SAMPLE_PRICES);
+        const randomTime = new Date(now - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString();
+
+        stmt.run(guildId, channelId, buyer, product, price, comment, randomTime);
+      }
+      this.db.exec('COMMIT;');
+    } catch (err) {
+      this.db.exec('ROLLBACK;');
+      throw err;
+    }
+
+    return this.getCreditStats(guildId);
   }
 
   getCreditStats(guildId) {

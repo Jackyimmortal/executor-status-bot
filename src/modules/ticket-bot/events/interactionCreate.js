@@ -233,7 +233,7 @@ async function handleOpenTicket(interaction, { db, client }) {
   }
 
   const ticketNumber = db.getNextTicketNumber(guild.id);
-  const channelName = `ticket-${String(ticketNumber).padStart(4, '0')}`;
+  const channelName = `tk-${ticketNumber}`;
 
   try {
     const permissionOverwrites = [
@@ -306,9 +306,10 @@ async function handleOpenTicket(interaction, { db, client }) {
 
     const welcomeEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle(`🎫 ห้องทิกเก็ต #${String(ticketRecord.ticketNumber).padStart(4, '0')}`)
+      .setTitle(`🎫 ห้องทิกเก็ต Tk#${ticketRecord.ticketNumber}`)
       .setDescription(
         `สวัสดีครับคุณ <@${interaction.user.id}>!\n\n` +
+        `ยินดีต้อนรับสู่ Ticket อันที่ #${ticketRecord.ticketNumber}\n` +
         `กรุณาพิมพ์แจ้งปัญหาหรือเรื่องที่ต้องการติดต่อได้เลยครับ ทีมงาน <@&${panel.support_role_id}> จะรีบเข้ามาตอบกลับโดยเร็วที่สุดครับ`
       )
       .addFields(
@@ -325,7 +326,7 @@ async function handleOpenTicket(interaction, { db, client }) {
     });
 
     await interaction.editReply({
-      content: `✅ **เปิดห้องทิกเก็ตของคุณเรียบร้อยแล้ว!** 👉 ไปที่ห้อง <#${channel.id}> ได้เลยครับ`
+      content: `✅ **เปิดห้องทิกเก็ตของคุณเรียบร้อยแล้ว!** 👉 ไปที่ห้อง <#${channel.id}> (Tk #${ticketRecord.ticketNumber}) ได้เลยครับ`
     });
   } catch (err) {
     logger.error('Failed to create ticket channel:', err);
